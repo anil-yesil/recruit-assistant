@@ -1,0 +1,277 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ===========================================================================
+   Calm Study palette
+   Warm off-white + sage primary + clay & plum accents
+   Inter body + Fraunces serif headlines (Notion / Linear DNA)
+   =========================================================================== */
+
+:root {
+  /* Surfaces */
+  --background: oklch(0.97 0.012 80);            /* #FAF7F2 */
+  --foreground: oklch(0.21 0.01 60);             /* #27241F */
+  --card: oklch(1 0 0);                          /* #FFFFFF */
+  --card-foreground: oklch(0.21 0.01 60);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.01 60);
+
+  /* Primary — sage */
+  --primary: oklch(0.58 0.06 145);               /* #5C8A6B */
+  --primary-foreground: oklch(0.99 0 0);
+
+  /* Secondary / muted — warm beige */
+  --secondary: oklch(0.94 0.018 80);             /* #F4F0E8 */
+  --secondary-foreground: oklch(0.27 0.012 60);
+  --muted: oklch(0.94 0.018 80);
+  --muted-foreground: oklch(0.46 0.018 60);      /* #6B6458 */
+
+  /* Accent — clay (for streaks, secondary CTAs) */
+  --accent: oklch(0.6 0.13 50);                  /* #B8632F */
+  --accent-foreground: oklch(0.99 0 0);
+
+  /* Plum tertiary */
+  --tertiary: oklch(0.5 0.085 320);              /* #7E5B8E */
+  --tertiary-foreground: oklch(0.99 0 0);
+
+  /* Status */
+  --destructive: oklch(0.55 0.16 25);            /* #B84A4A */
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.58 0.06 145);               /* sage */
+  --warning: oklch(0.7 0.12 80);                 /* gold */
+
+  /* Borders / inputs */
+  --border: oklch(0.9 0.02 80);                  /* #E8E2D5 */
+  --input: oklch(0.9 0.02 80);
+  --ring: oklch(0.58 0.06 145);                  /* sage */
+
+  /* Charts */
+  --chart-1: oklch(0.58 0.06 145);
+  --chart-2: oklch(0.6 0.13 50);
+  --chart-3: oklch(0.5 0.085 320);
+  --chart-4: oklch(0.7 0.12 80);
+  --chart-5: oklch(0.66 0.04 145);
+
+  --radius: 0.625rem;
+
+  /* Sidebar */
+  --sidebar: oklch(0.97 0.012 80);
+  --sidebar-foreground: oklch(0.21 0.01 60);
+  --sidebar-primary: oklch(0.58 0.06 145);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.94 0.024 145);       /* sage tint */
+  --sidebar-accent-foreground: oklch(0.58 0.06 145);
+  --sidebar-border: oklch(0.9 0.02 80);
+  --sidebar-ring: oklch(0.58 0.06 145);
+
+  /* Calm Study accent surfaces (used directly via var()) */
+  --sage: #5C8A6B;
+  --sage-bg: #E8F0EA;
+  --clay: #B8632F;
+  --clay-bg: #F5E6D8;
+  --plum: #7E5B8E;
+  --plum-bg: #EFE6F2;
+  --gold: #B89530;
+  --hard: #B84A4A;
+  --hard-bg: #F5DFDF;
+  --ink-serif: #1A1815;
+  --text-subtle: #9A9385;
+  --border-strong: #D9D2C2;
+}
+
+.dark {
+  --background: oklch(0.17 0.005 60);            /* #181614 */
+  --foreground: oklch(0.95 0.012 80);            /* #F4EFE7 */
+  --card: oklch(0.21 0.006 60);                  /* #221F1B */
+  --card-foreground: oklch(0.95 0.012 80);
+  --popover: oklch(0.21 0.006 60);
+  --popover-foreground: oklch(0.95 0.012 80);
+
+  --primary: oklch(0.72 0.05 145);               /* #8FB59B */
+  --primary-foreground: oklch(0.17 0.005 60);
+
+  --secondary: oklch(0.25 0.006 60);             /* #2A2723 */
+  --secondary-foreground: oklch(0.95 0.012 80);
+  --muted: oklch(0.25 0.006 60);
+  --muted-foreground: oklch(0.7 0.012 80);
+
+  --accent: oklch(0.74 0.1 50);                  /* #D89A6F */
+  --accent-foreground: oklch(0.17 0.005 60);
+
+  --tertiary: oklch(0.74 0.06 320);              /* #B79AC0 */
+  --tertiary-foreground: oklch(0.17 0.005 60);
+
+  --destructive: oklch(0.65 0.13 25);            /* #D87A7A */
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.72 0.05 145);
+  --warning: oklch(0.82 0.1 80);
+
+  --border: oklch(0.27 0.005 60);                /* #33302B */
+  --input: oklch(0.27 0.005 60);
+  --ring: oklch(0.72 0.05 145);
+
+  --chart-1: oklch(0.72 0.05 145);
+  --chart-2: oklch(0.74 0.1 50);
+  --chart-3: oklch(0.74 0.06 320);
+  --chart-4: oklch(0.82 0.1 80);
+  --chart-5: oklch(0.66 0.04 145);
+
+  --sidebar: oklch(0.17 0.005 60);
+  --sidebar-foreground: oklch(0.95 0.012 80);
+  --sidebar-primary: oklch(0.72 0.05 145);
+  --sidebar-primary-foreground: oklch(0.17 0.005 60);
+  --sidebar-accent: oklch(0.26 0.012 145);
+  --sidebar-accent-foreground: oklch(0.72 0.05 145);
+  --sidebar-border: oklch(0.27 0.005 60);
+  --sidebar-ring: oklch(0.72 0.05 145);
+
+  --sage: #8FB59B;
+  --sage-bg: rgba(143, 181, 155, 0.14);
+  --clay: #D89A6F;
+  --clay-bg: rgba(216, 154, 111, 0.16);
+  --plum: #B79AC0;
+  --plum-bg: rgba(183, 154, 192, 0.16);
+  --gold: #E8C170;
+  --hard: #D87A7A;
+  --hard-bg: rgba(216, 122, 122, 0.14);
+  --ink-serif: #F4EFE7;
+  --text-subtle: #7A7268;
+  --border-strong: #403C36;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), "Inter", system-ui, sans-serif;
+  --font-serif: var(--font-fraunces), "Fraunces", Georgia, serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback";
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-tertiary: var(--tertiary);
+  --color-tertiary-foreground: var(--tertiary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground m-0 min-h-screen;
+    font-family: var(--font-sans);
+    overflow-x: hidden;
+  }
+}
+
+/* Calm Study utilities */
+@layer utilities {
+  .font-serif {
+    font-family: var(--font-serif);
+    letter-spacing: -0.01em;
+  }
+  .serif-headline {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    color: var(--ink-serif);
+  }
+  .text-sage { color: var(--sage); }
+  .bg-sage { background-color: var(--sage); }
+  .bg-sage-soft { background-color: var(--sage-bg); }
+  .text-clay { color: var(--clay); }
+  .bg-clay { background-color: var(--clay); }
+  .bg-clay-soft { background-color: var(--clay-bg); }
+  .text-plum { color: var(--plum); }
+  .bg-plum { background-color: var(--plum); }
+  .bg-plum-soft { background-color: var(--plum-bg); }
+  .text-subtle { color: var(--text-subtle); }
+  .text-hard { color: var(--hard); }
+  .bg-hard { background-color: var(--hard); }
+  .bg-hard-soft { background-color: var(--hard-bg); }
+  .border-strong { border-color: var(--border-strong); }
+  .eyebrow {
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+    color: var(--muted-foreground);
+  }
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .page-shell {
+    box-sizing: border-box;
+    width: 100%;
+    padding-left: max(1rem, calc((100vw - 80rem) / 2));
+    padding-right: max(1rem, calc((100vw - 80rem) / 2));
+  }
+}
+
+/* Voice call wave bar animation */
+@keyframes wave-bar {
+  0% { height: 15%; }
+  100% { height: 85%; }
+}
+
+/* ── Custom scrollbar — theme-aware ────────────────────────────── */
+/* Thin, unobtrusive scrollbar that respects light/dark palette    */
+
+/* Webkit (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}

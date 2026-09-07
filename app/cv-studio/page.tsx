@@ -1,0 +1,1345 @@
+"use client"
+
+import { useRef, useState, useEffect } from "react"
+import { toast } from "sonner"
+
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
+import {
+  AlertCircle,
+  Download,
+  FileText,
+  Loader2,
+  Plus,
+  Sparkles,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react"
+import { useLanguage } from "@/lib/language-context"
+import { useWorkspace } from "@/lib/workspace-context"
+import { SKILLS } from "@/lib/data/skills"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command"
+import { Check } from "lucide-react"
+
+import Editor from "@monaco-editor/react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
+export default function CVStudioPage() {
+  const { t } = useLanguage()
+  const { activeWorkspace } = useWorkspace()
+  const [language, setLanguage] = useState("en")
+  type CVData = {
+    name: string
+    email: string
+    phone: string
+    location: string
+    linkedin: string
+    github: string
+    summary: string
+    education: { degree: string; school: string; gpa: string; startDate: string; endDate: string }[]
+    experience: { role: string; company: string; bullets: string[]; startDate: string; endDate: string }[]
+    projects: { title: string; techStack: string; date: string; description: string }[]
+    skills: string[]
+    specialInstructions: string
+  }
+
+  const [cvData, setCvData] = useState<CVData>({
+    name: "",
+    email: "",
+    phone: "",
+    location: "",
+    linkedin: "",
+    github: "",
+    summary: "",
+    education: [],
+    experience: [],
+    projects: [],
+    skills: [],
+    specialInstructions: "",
+  })
+
+  const [isParsing, setIsParsing] = useState(false)
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [isGeneratingCoverLetter, setIsGeneratingCoverLetter] = useState(false)
+  const [generatedLatex, setGeneratedLatex] = useState("")
+  const [generatedPdfBase64, setGeneratedPdfBase64] = useState<string | null>(null)
+
+  const [generatedCoverLetterLatex, setGeneratedCoverLetterLatex] = useState("")
+  const [generatedCoverLetterPdfBase64, setGeneratedCoverLetterPdfBase64] = useState<
+    string | null
+  >(null)
+
+  const [generationError, setGenerationError] = useState("")
+  const [isGenerated, setIsGenerated] = useState(false)
+  const [isCoverLetterGenerated, setIsCoverLetterGenerated] = useState(false)
+  const [isCompiling, setIsCompiling] = useState(false)
+
+  const addEducation = () =>
+    setCvData({
+      ...cvData,
+      education: [
+        { degree: "", school: "", gpa: "", startDate: "", endDate: "" },
+        ...cvData.education,
+      ],
+    })
+  const removeEducation = (i: number) =>
+    setCvData({ ...cvData, education: cvData.education.filter((_, idx) => idx !== i) })
+
+  const addExperience = () => {
+    setCvData({
+      ...cvData,
+      experience: [
+        { role: "", company: "", bullets: [""], startDate: "", endDate: "" },
+        ...cvData.experience,
+      ],
+    })
+  }
+  const removeExperience = (i: number) =>
+    setCvData({ ...cvData, experience: cvData.experience.filter((_, idx) => idx !== i) })
+
+  const addProject = () =>
+    setCvData({
+      ...cvData,
+      projects: [
+        { title: "", techStack: "", date: "", description: "" },
+        ...cvData.projects,
+      ],
+    })
+  const removeProject = (i: number) =>
+    setCvData({ ...cvData, projects: cvData.projects.filter((_, idx) => idx !== i) })
+
+  const toggleSkill = (skill: string) => {
+    const trimmed = skill.trim()
+    if (!trimmed) return
+    setCvData((prev) => {
+      const exists = prev.skills.some((s) => s.toLowerCase() === trimmed.toLowerCase())
+      return {
+        ...prev,
+        skills: exists
+          ? prev.skills.filter((s) => s.toLowerCase() !== trimmed.toLowerCase())
+          : [...prev.skills, trimmed],
+      }
+    })
+  }
+  const removeSkill = (i: number) =>
+    setCvData({ ...cvData, skills: cvData.skills.filter((_, idx) => idx !== i) })
+
+  // Fetch initial CV Data
+
+  useEffect(() => {
+    const fetchInitialCV = async () => {
+      try {
+        let url = `${API_BASE}/api/cv/base`
+        // If workspace already has a generated CV, load that instead of base CV
+        if (activeWorkspace?.generated_cv_id) {
+          url = `${API_BASE}/api/cv/${activeWorkspace.generated_cv_id}`
+        }
+
+        const response = await fetch(url, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include"
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.parsed_data) {
+            // Mapping the parsed JSON back to CVData state
+            // The JSON from OpenAI has slightly different keys sometimes depending on the prompt
+            const p = data.parsed_data
+            setCvData(prev => ({
+              ...prev,
+              name: p.name || p.full_name || prev.name,
+              email: p.email || prev.email,
+              phone: p.phone || prev.phone,
+              location: p.location || prev.location,
+              linkedin: p.linkedin || prev.linkedin,
+              github: p.github || prev.github,
+              summary: p.summary || prev.summary,
+              education: p.education?.length ? p.education : prev.education,
+              experience: p.experience?.length ? p.experience : prev.experience,
+              projects: p.projects?.length
+                ? p.projects.map((proj: any) => ({
+                  ...proj,
+                  techStack: Array.isArray(proj.techStack) ? proj.techStack.join(", ") : (proj.techStack || "")
+                }))
+                : prev.projects,
+              skills: p.skills?.length ? p.skills : prev.skills,
+            }))
+          }
+          if (data.latex_content) {
+            setIsCompiling(true)
+            setIsGenerated(true)
+            setGeneratedLatex(data.latex_content)
+            fetch(`${API_BASE}/api/compile-latex`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                latex_content: data.latex_content,
+                workspace_id: null, // null so we don't overwrite DB unnecessarily
+                document_type: "cv"
+              }),
+              credentials: "include"
+            }).then(res => res.json()).then(compileData => {
+              if (compileData.pdf_base64) {
+                setGeneratedPdfBase64(compileData.pdf_base64)
+              }
+            }).catch(err => console.error("Auto compile failed", err))
+              .finally(() => setIsCompiling(false))
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load initial CV data:", e)
+      }
+    }
+    fetchInitialCV()
+  }, [activeWorkspace?.generated_cv_id])
+
+  const addBullet = (expIndex: number) => {
+    const next = [...cvData.experience]
+    next[expIndex].bullets.push("")
+    setCvData({ ...cvData, experience: next })
+  }
+  const removeBullet = (expIndex: number, bIndex: number) => {
+    const next = [...cvData.experience]
+    next[expIndex].bullets = next[expIndex].bullets.filter((_, idx) => idx !== bIndex)
+    setCvData({ ...cvData, experience: next })
+  }
+  const updateExperienceBullet = (expIndex: number, bIndex: number, value: string) => {
+    const next = [...cvData.experience]
+    next[expIndex].bullets[bIndex] = value
+    setCvData({ ...cvData, experience: next })
+  }
+  const updateExperience = (i: number, field: string, value: string) => {
+    const next = [...cvData.experience]
+      ; (next[i] as any)[field] = value
+    setCvData({ ...cvData, experience: next })
+  }
+  const updateProject = (i: number, field: string, value: string) => {
+    const next = [...cvData.projects]
+      ; (next[i] as any)[field] = value
+    setCvData({ ...cvData, projects: next })
+  }
+  const updateEducation = (i: number, field: string, value: string) => {
+    const next = [...cvData.education]
+      ; (next[i] as any)[field] = value
+    setCvData({ ...cvData, education: next })
+  }
+
+  const formatCandidateProfile = () => ({
+    full_name: cvData.name,
+    email: cvData.email,
+    phone: cvData.phone || null,
+    linkedin: cvData.linkedin || null,
+    github: cvData.github || null,
+    location: cvData.location || null,
+    summary: cvData.summary || null,
+    skills: cvData.skills,
+    experience: cvData.experience.map((e) => ({
+      company: e.company,
+      title: e.role,
+      start_date: e.startDate,
+      end_date: e.endDate || null,
+      bullets: e.bullets,
+    })),
+    education: cvData.education.map((e) => ({
+      institution: e.school,
+      degree: e.degree,
+      start_date: e.startDate || null,
+      end_date: e.endDate || null,
+      gpa: e.gpa || null,
+      highlights: [],
+    })),
+    projects: cvData.projects.map((p) => ({
+      name: p.title,
+      description: p.description,
+      date: p.date || null,
+      technologies: Array.isArray(p.techStack)
+        ? p.techStack
+        : (p.techStack || "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+    })),
+    certifications: [],
+  })
+
+  const buildTargetJobContext = () => {
+    const jd = activeWorkspace?.jobDescription?.trim() || ""
+    const parts: string[] = []
+    if (activeWorkspace?.name?.trim()) parts.push(`Company: ${activeWorkspace.name.trim()}`)
+    if (activeWorkspace?.jobName?.trim()) parts.push(`Role: ${activeWorkspace.jobName.trim()}`)
+    if (jd) parts.push(`Job Description:\n${jd}`)
+    return parts.join("\n\n")
+  }
+
+  const stripLatexFences = (latex: string) =>
+    latex
+      // Strip a leading ```latex (or ```) line (with optional surrounding whitespace).
+      .replace(/^\s*```[a-zA-Z]*\s*\n/, "")
+      // Strip a trailing ``` (with optional surrounding whitespace).
+      .replace(/\n?\s*```\s*$/, "")
+      .trim()
+
+  // Latin Extended-A Turkish chars get silently dropped by pdfLaTeX with
+  // [utf8]{inputenc} + tgtermes/tgheros (font's T1 subset doesn't cover them).
+  // Translate to LaTeX escapes that always render. Mirrors the server-side
+  // _escape_problem_turkish_chars in services/ai_generator.py — keep in sync.
+  const escapeTurkishChars = (latex: string) =>
+    latex
+      .replace(/İ/g, "\\.{I}")
+      .replace(/Ş/g, "\\c{S}")
+      .replace(/ş/g, "\\c{s}")
+      .replace(/Ğ/g, "\\u{G}")
+      .replace(/ğ/g, "\\u{g}")
+      .replace(/ı/g, "\\i{}")
+
+  const normalizeResumeSectionDividers = (latex: string) =>
+    latex.replace(
+      /(\\section\*\{[^{}]+\})\s*(?:\\vspace\{[^{}]+\}\s*)?\\hrule\s*(?:\\vspace\{[^{}]+\}\s*)?/g,
+      "$1\\vspace{-0.65em}\n\\hrule\n\\vspace{0.2em}\n"
+    )
+
+  const compileLatexLocally = async (latex: string, isCoverLetter: boolean) => {
+    setIsCompiling(true)
+    try {
+      const workspaceId = activeWorkspace ? parseInt(activeWorkspace.id) : null
+      const documentType = isCoverLetter ? "cover_letter" : "cv"
+      const response = await fetch(`${API_BASE}/api/compile-latex`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          latex_content: latex,
+          workspace_id: workspaceId,
+          document_type: documentType,
+          cv_data: isCoverLetter ? undefined : cvData,
+        }),
+        credentials: "include",
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "Compilation failed on backend")
+      if (isCoverLetter) setGeneratedCoverLetterPdfBase64(data.pdf_base64)
+      else {
+        setGeneratedPdfBase64(data.pdf_base64)
+        if (data.cv_id && activeWorkspace) {
+          activeWorkspace.generated_cv_id = data.cv_id
+        }
+      }
+    } catch (e: any) {
+      console.error("Compile Error:", e.message)
+      if (isCoverLetter) setGeneratedCoverLetterPdfBase64(null)
+      else setGeneratedPdfBase64(null)
+    } finally {
+      setIsCompiling(false)
+    }
+  }
+
+  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setIsParsing(true)
+    setGenerationError("")
+    const fd = new FormData()
+    fd.append("file", file)
+    try {
+      const res = await fetch("/api/parse-resume", {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || "Failed to parse resume")
+      }
+      const parsed = await res.json()
+      setCvData((prev) => ({
+        name: parsed.name ?? "",
+        email: parsed.email ?? "",
+        phone: parsed.phone ?? "",
+        location: parsed.location ?? "",
+        linkedin: parsed.linkedin ?? "",
+        github: parsed.github ?? "",
+        summary: parsed.summary ?? "",
+        education: parsed.education ?? [],
+        experience: parsed.experience ?? [],
+        projects: (parsed.projects ?? []).map((proj: any) => ({
+          ...proj,
+          techStack: Array.isArray(proj.techStack) ? proj.techStack.join(", ") : (proj.techStack || "")
+        })),
+        skills: parsed.skills ?? [],
+        specialInstructions: prev.specialInstructions,
+      }))
+      setUploadedFileName(file.name)
+    } catch (e: any) {
+      setGenerationError(e.message || "An error occurred while parsing the resume")
+    } finally {
+      setIsParsing(false)
+      // Clear the native input so re-selecting the same file fires onChange again
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
+
+  const handleRemoveUploadedFile = () => {
+    setUploadedFileName(null)
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
+
+  const generateCV = async () => {
+    setIsGenerating(true)
+    setIsGenerated(true)
+    setGenerationError("")
+    setGeneratedPdfBase64(null)
+    setGeneratedLatex("")
+    try {
+      const targetJobContext = buildTargetJobContext()
+      const res = await fetch(`${API_BASE}/api/generate-cv`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidate_profile: formatCandidateProfile(),
+          job_description: targetJobContext,
+          special_instructions: cvData.specialInstructions,
+          output_language: language,
+        }),
+        credentials: "include",
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || t("Failed to generate CV"))
+      }
+      if (!res.body) throw new Error("ReadableStream not supported")
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let latex = ""
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        latex += decoder.decode(value, { stream: true })
+        setGeneratedLatex(latex)
+      }
+      latex = stripLatexFences(latex)
+      latex = normalizeResumeSectionDividers(latex)
+      latex = escapeTurkishChars(latex)
+      setGeneratedLatex(latex)
+      await compileLatexLocally(latex, false)
+      toast.success(
+        language === "tr" ? "CV'niz hazır! 🎉" : "Your CV is ready! 🎉",
+        { description: language === "tr" ? "Aşağıdan indirebilirsiniz." : "You can download it below." }
+      )
+    } catch (e: any) {
+      setGenerationError(e.message || t("An error occurred while generating the CV"))
+      setIsGenerated(false)
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const generateCoverLetter = async () => {
+    setIsGeneratingCoverLetter(true)
+    setIsCoverLetterGenerated(true)
+    setGenerationError("")
+    setGeneratedCoverLetterPdfBase64(null)
+    setGeneratedCoverLetterLatex("")
+    try {
+      const dateLocale = language === "Turkish" ? "tr-TR" : "en-US"
+      const currentDate = new Date().toLocaleDateString(dateLocale, {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })
+      const targetJobContext = buildTargetJobContext()
+      const recipientInstruction =
+        language === "Turkish"
+          ? "Alıcı bloğunda İşe Alım Yetkilisi ifadesini ve iş ilanından çıkarılabilirse gerçek şirket adını kullan. Hiring Manager, Company Address, Address veya başka İngilizce alıcı/adres etiketi yazma. Bilinmeyen adres satırlarını tamamen atla. Yer/ülke bilgisi gerekiyorsa Türkçe kullan."
+          : "In the recipient block, include Hiring Manager and the actual company name extracted from the job description when available. Do not include a Company Address line. Never output placeholder text."
+      const coverLetterInstructions = [
+        `Use this exact cover letter date: ${currentDate}.`,
+        recipientInstruction,
+        cvData.specialInstructions,
+      ]
+        .filter(Boolean)
+        .join("\n")
+
+      const res = await fetch(`${API_BASE}/api/generate-cover-letter`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidate_profile: formatCandidateProfile(),
+          job_description: targetJobContext,
+          special_instructions: coverLetterInstructions,
+          output_language: language,
+        }),
+        credentials: "include",
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || t("Failed to generate Cover Letter"))
+      }
+      if (!res.body) throw new Error("ReadableStream not supported")
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let latex = ""
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        latex += decoder.decode(value, { stream: true })
+        setGeneratedCoverLetterLatex(latex)
+      }
+      latex = stripLatexFences(latex)
+      latex = escapeTurkishChars(latex)
+      setGeneratedCoverLetterLatex(latex)
+      await compileLatexLocally(latex, true)
+      toast.success(
+        language === "tr" ? "Cover Letter hazır! 🎉" : "Your Cover Letter is ready! 🎉",
+        { description: language === "tr" ? "Aşağıdan indirebilirsiniz." : "You can download it below." }
+      )
+    } catch (e: any) {
+      setGenerationError(e.message || t("An error occurred while generating the Cover Letter"))
+      setIsCoverLetterGenerated(false)
+    } finally {
+      setIsGeneratingCoverLetter(false)
+    }
+  }
+
+  const downloadLatex = (content: string, prefix: string) => {
+    if (!content) return
+    const blob = new Blob([content], { type: "text/plain" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${cvData.name.replace(/\s+/g, "_")}_${prefix}.tex`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const downloadPDF = (b64: string | null, prefix: string) => {
+    if (!b64) return
+    try {
+      const byteCharacters = atob(b64)
+      const byteNumbers = new Array(byteCharacters.length)
+      for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i)
+      const byteArray = new Uint8Array(byteNumbers)
+      const blob = new Blob([byteArray], { type: "application/pdf" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `${cvData.name.replace(/\s+/g, "_")}_${prefix}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error("Error creating PDF download blob:", e)
+    }
+  }
+
+  return (
+    <div className="px-4 py-5 sm:px-7 sm:py-7 md:px-9">
+      <div data-tour="cv-header" className="mb-7">
+        <p className="eyebrow text-clay">{t("cvStudio")}</p>
+        <h1 className="serif-headline mt-1 text-[24px] sm:text-[32px] font-normal leading-tight tracking-tight">
+          {t("CV Studio")}
+        </h1>
+      </div>
+
+      <div className="flex flex-col-reverse gap-6 lg:grid lg:grid-cols-12 lg:items-start">
+        {/* Input Form (col 8) */}
+        <div className="space-y-5 lg:col-span-8">
+          {/* Personal Information */}
+          <Section title={t("Personal Information")}>
+            <div className="space-y-2">
+              <Label className="text-[12px] font-semibold">{t("CV language")}</Label>
+              <Select value={language} onValueChange={setLanguage}>
+                <SelectTrigger className="h-11 rounded-lg border-border bg-background">
+                  <SelectValue placeholder={t("Select language")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="en">{t("English")}</SelectItem>
+                  <SelectItem value="tr">{t("Turkish")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label={t("Full Name")}>
+                <Input
+                  value={cvData.name}
+                  onChange={(e) => setCvData({ ...cvData, name: e.target.value })}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label={t("Email")}>
+                <Input
+                  type="email"
+                  value={cvData.email}
+                  onChange={(e) => setCvData({ ...cvData, email: e.target.value })}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label={t("Phone")}>
+                <Input
+                  value={cvData.phone}
+                  onChange={(e) => setCvData({ ...cvData, phone: e.target.value })}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label={t("Location")}>
+                <Input
+                  value={cvData.location}
+                  onChange={(e) => setCvData({ ...cvData, location: e.target.value })}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label={t("LinkedIn URL")}>
+                <Input
+                  value={cvData.linkedin}
+                  onChange={(e) => setCvData({ ...cvData, linkedin: e.target.value })}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label={t("GitHub/Portfolio URL")}>
+                <Input
+                  value={cvData.github}
+                  onChange={(e) => setCvData({ ...cvData, github: e.target.value })}
+                  className={inputCls}
+                />
+              </Field>
+            </div>
+            <Field label={t("Professional Summary")}>
+              <Textarea
+                value={cvData.summary}
+                onChange={(e) => setCvData({ ...cvData, summary: e.target.value })}
+                className="min-h-[120px] resize-none rounded-lg border-border bg-background px-3.5 py-2.5 text-[14px] leading-relaxed"
+              />
+            </Field>
+          </Section>
+
+          {/* Education */}
+          <Section
+            title={t("Education")}
+            action={<AddButton onClick={addEducation} label={t("Add")} />}
+          >
+            {cvData.education.map((edu, idx) => (
+              <SubCard key={idx}>
+                {cvData.education.length > 1 && (
+                  <RemoveButton onClick={() => removeEducation(idx)} />
+                )}
+                <Field label={t("Degree")}>
+                  <Input
+                    value={edu.degree}
+                    onChange={(e) => updateEducation(idx, "degree", e.target.value)}
+                    className={inputCls}
+                  />
+                </Field>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label={t("School")}>
+                    <Input
+                      value={edu.school}
+                      onChange={(e) => updateEducation(idx, "school", e.target.value)}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <Field label={t("GPA")}>
+                    <Input
+                      value={edu.gpa}
+                      onChange={(e) => updateEducation(idx, "gpa", e.target.value)}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <Field label={t("Start Date")}>
+                    <Input
+                      value={edu.startDate}
+                      onChange={(e) => updateEducation(idx, "startDate", e.target.value)}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <Field label={t("End Date")}>
+                    <Input
+                      value={edu.endDate}
+                      onChange={(e) => updateEducation(idx, "endDate", e.target.value)}
+                      className={inputCls}
+                    />
+                  </Field>
+                </div>
+              </SubCard>
+            ))}
+          </Section>
+
+          {/* Experience */}
+          <Section
+            title={t("Experience")}
+            action={
+              <AddButton onClick={addExperience} label={t("Add")} />
+            }
+          >
+            {cvData.experience.map((exp, idx) => (
+              <SubCard key={idx}>
+                {cvData.experience.length > 1 && (
+                  <RemoveButton onClick={() => removeExperience(idx)} />
+                )}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label={t("Role")}>
+                    <Input
+                      value={exp.role}
+                      placeholder={t("Software Engineer")}
+                      onChange={(e) => updateExperience(idx, "role", e.target.value)}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <Field label={t("Company")}>
+                    <Input
+                      value={exp.company}
+                      placeholder={t("Tech Company Inc.")}
+                      onChange={(e) => updateExperience(idx, "company", e.target.value)}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <Field label={t("Start Date")}>
+                    <Input
+                      value={exp.startDate}
+                      placeholder={t("Jan 2023")}
+                      onChange={(e) => updateExperience(idx, "startDate", e.target.value)}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <Field label={t("End Date")}>
+                    <Input
+                      value={exp.endDate}
+                      placeholder={t("Present")}
+                      onChange={(e) => updateExperience(idx, "endDate", e.target.value)}
+                      className={inputCls}
+                    />
+                  </Field>
+                </div>
+                <div className="space-y-2.5">
+                  <Label className="text-[12px] font-semibold">
+                    {t("Responsibilities & Achievements")}
+                  </Label>
+                  {exp.bullets.map((bullet, bIdx) => (
+                    <div key={bIdx} className="group/bullet flex gap-2">
+                      <Textarea
+                        value={bullet}
+                        onChange={(e) => updateExperienceBullet(idx, bIdx, e.target.value)}
+                        className="min-h-[78px] flex-1 resize-none rounded-lg border-border bg-background px-3.5 py-2.5 text-[14px] leading-relaxed"
+                        placeholder="• Developed features that improved..."
+                      />
+                      {exp.bullets.length > 1 && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="mt-1 h-8 w-8 self-start rounded-md text-muted-foreground opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover/bullet:opacity-100"
+                          onClick={() => removeBullet(idx, bIdx)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  <AddButton onClick={() => addBullet(idx)} label={t("Add bullet point")} small />
+                </div>
+              </SubCard>
+            ))}
+          </Section>
+
+          {/* Projects */}
+          <Section
+            title={t("Projects")}
+            action={<AddButton onClick={addProject} label={t("Add")} />}
+          >
+            {cvData.projects.map((project, idx) => (
+              <SubCard key={idx}>
+                {cvData.projects.length > 1 && (
+                  <RemoveButton onClick={() => removeProject(idx)} />
+                )}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label={t("Project Title")}>
+                    <Input
+                      value={project.title}
+                      placeholder={t("E-commerce Platform")}
+                      onChange={(e) => updateProject(idx, "title", e.target.value)}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <Field label={t("Project Date")}>
+                    <Input
+                      value={project.date}
+                      placeholder="2024"
+                      onChange={(e) => updateProject(idx, "date", e.target.value)}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <div className="sm:col-span-2">
+                    <Field label={t("Tech Stack")}>
+                      <Input
+                        value={project.techStack}
+                        placeholder="React, Node.js, MongoDB"
+                        onChange={(e) => updateProject(idx, "techStack", e.target.value)}
+                        className={inputCls}
+                      />
+                    </Field>
+                  </div>
+                </div>
+                <Field label={t("Description")}>
+                  <Textarea
+                    value={project.description}
+                    onChange={(e) => updateProject(idx, "description", e.target.value)}
+                    className="min-h-[120px] resize-none rounded-lg border-border bg-background px-3.5 py-2.5 text-[14px] leading-relaxed"
+                    placeholder={t("Built a full-stack application that...")}
+                  />
+                </Field>
+              </SubCard>
+            ))}
+          </Section>
+
+        </div>
+
+        {/* Right rail (col 4) — JD + actions */}
+        <div className="space-y-5 lg:sticky lg:top-6 lg:col-span-4">
+          {/* Upload Resume */}
+          <Section
+            title={t("Upload Resume")}
+            iconBg="sage"
+            icon={<Upload className="h-5 w-5" />}
+            dataTour="cv-upload"
+          >
+            {uploadedFileName ? (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-sage-soft/40 px-3.5 py-2.5">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <FileText className="h-5 w-5 flex-shrink-0 text-sage" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{uploadedFileName}</p>
+                    <p className="text-[11px] text-muted-foreground">{t("Uploaded")}</p>
+                  </div>
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={handleRemoveUploadedFile}
+                  disabled={isParsing}
+                  aria-label={t("Remove file")}
+                  className="h-8 w-8 flex-shrink-0 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  onChange={handleResumeUpload}
+                  disabled={isParsing}
+                  className="h-11 cursor-pointer rounded-lg border border-border bg-background px-3 text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-secondary file:px-3 file:text-xs file:font-medium file:text-foreground hover:bg-secondary/40"
+                />
+                {isParsing && (
+                  <div className="flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {t("Parsing...")}
+                  </div>
+                )}
+              </div>
+            )}
+          </Section>
+
+          {/* Skills */}
+          <Section title={t("Skills")}>
+            <SkillsMultiSelect
+              selected={cvData.skills}
+              onToggle={toggleSkill}
+              onRemove={removeSkill}
+              t={t}
+            />
+          </Section>
+
+          {/* Special Instructions */}
+          <Section title={t("Special Instructions")}>
+            <Textarea
+              value={cvData.specialInstructions}
+              onChange={(e) =>
+                setCvData({ ...cvData, specialInstructions: e.target.value })
+              }
+              className="min-h-[120px] resize-none rounded-lg border-border bg-background px-3.5 py-2.5 text-[13px] leading-relaxed"
+              placeholder={t(
+                "e.g., 'Make it more professional', 'Focus on my leadership skills', 'Keep it under one page'"
+              )}
+            />
+          </Section>
+
+          {generationError && (
+            <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-[13px] text-destructive">
+              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+              <p>{generationError}</p>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2.5">
+            <Button
+              data-tour="cv-generate-btn"
+              className="gap-2 rounded-lg bg-primary px-5 py-3 text-[14px] font-semibold text-primary-foreground hover:bg-primary/90"
+              onClick={generateCV}
+              disabled={isGenerating || isGeneratingCoverLetter}
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t("Generating CV...")}
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  {t("Generate CV")}
+                </>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              className="gap-2 rounded-lg border-border px-5 py-3 text-[13px] font-semibold"
+              onClick={generateCoverLetter}
+              disabled={isGenerating || isGeneratingCoverLetter}
+            >
+              {isGeneratingCoverLetter ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t("Generating Letter...")}
+                </>
+              ) : (
+                <>
+                  <FileText className="h-4 w-4" />
+                  {t("Generate Cover Letter")}
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Generated Documents */}
+      <div className="mt-6 rounded-2xl border border-border bg-card p-6">
+        <h2 className="mb-4 font-serif text-[19px] font-medium tracking-tight">
+          {t("Generated Documents")}
+        </h2>
+        {isGenerating || isGeneratingCoverLetter ? (
+          <div className="flex items-center justify-center rounded-xl border border-dashed border-border bg-secondary/30 py-16">
+            <Loader2 className="h-7 w-7 animate-spin text-sage" />
+          </div>
+        ) : !isGenerated && !isCoverLetterGenerated ? (
+          <div className="grid place-items-center rounded-xl border border-dashed border-border bg-secondary/30 py-16">
+            <FileText className="h-6 w-6 text-subtle" />
+          </div>
+        ) : (
+          <Tabs defaultValue={isGenerated ? "cv" : "cover-letter"} className="w-full">
+            <TabsList className="mb-4 grid w-full grid-cols-2 rounded-lg bg-secondary p-1">
+              <TabsTrigger value="cv" disabled={!isGenerated}>
+                {t("CV")}
+              </TabsTrigger>
+              <TabsTrigger value="cover-letter" disabled={!isCoverLetterGenerated}>
+                {t("Cover Letter")}
+              </TabsTrigger>
+            </TabsList>
+
+            {isGenerated && (
+              <TabsContent value="cv" className="space-y-4">
+                <Tabs defaultValue="pdf" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 rounded-lg bg-secondary p-1">
+                    <TabsTrigger value="pdf">{t("PDF View")}</TabsTrigger>
+                    <TabsTrigger value="latex">{t("LaTeX Source")}</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="pdf">
+                    <div className="flex flex-col justify-center rounded-xl border border-border bg-background">
+                      {generatedPdfBase64 ? (
+                        <iframe
+                          src={`data:application/pdf;base64,${generatedPdfBase64}`}
+                          className="min-h-[50vh] lg:min-h-[65vh] w-full rounded-xl"
+                          title="CV PDF"
+                        />
+                      ) : isCompiling ? (
+                        <div className="flex flex-col items-center justify-center gap-3 py-20">
+                          <Loader2 className="h-7 w-7 animate-spin text-sage" />
+                          <p className="text-sm font-medium text-muted-foreground">
+                            {t("Compiling PDF...")}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="p-6">
+                          <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>{t("Compilation Failed")}</AlertTitle>
+                            <AlertDescription>
+                              {t(
+                                "The backend could not render the LaTeX into a PDF. Please check the LaTeX Source tab, correct any syntax errors, and re-compile."
+                              )}
+                            </AlertDescription>
+                          </Alert>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-4 flex flex-col gap-2 xl:flex-row">
+                      <Button
+                        className="flex-1 gap-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
+                        disabled={!generatedPdfBase64}
+                        onClick={() => downloadPDF(generatedPdfBase64, "CV")}
+                      >
+                        <Download className="h-4 w-4" />
+                        {t("Download CV PDF")}
+                      </Button>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="latex">
+                    <div className="overflow-hidden rounded-xl border border-border">
+                      <Editor
+                        height="50vh"
+                        defaultLanguage="latex"
+                        theme="vs-dark"
+                        value={generatedLatex}
+                        options={{
+                          minimap: { enabled: false },
+                          wordWrap: "on",
+                          padding: { top: 16 },
+                          readOnly: true,
+                          domReadOnly: true,
+                        }}
+                      />
+                    </div>
+                    <div className="mt-4 flex flex-col gap-2 xl:flex-row">
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-2 rounded-lg border-border"
+                        onClick={() => navigator.clipboard.writeText(generatedLatex)}
+                      >
+                        <FileText className="h-4 w-4" />
+                        {t("Copy LaTeX Code")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-2 rounded-lg border-border"
+                        onClick={() => downloadLatex(generatedLatex, "CV")}
+                      >
+                        <Download className="h-4 w-4" />
+                        {t("Download .tex")}
+                      </Button>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </TabsContent>
+            )}
+
+            {isCoverLetterGenerated && (
+              <TabsContent value="cover-letter" className="space-y-4">
+                <Tabs defaultValue="pdf" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 rounded-lg bg-secondary p-1">
+                    <TabsTrigger value="pdf">{t("PDF View")}</TabsTrigger>
+                    <TabsTrigger value="latex">{t("LaTeX Source")}</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="pdf">
+                    <div className="flex flex-col justify-center rounded-xl border border-border bg-background">
+                      {generatedCoverLetterPdfBase64 ? (
+                        <iframe
+                          src={`data:application/pdf;base64,${generatedCoverLetterPdfBase64}`}
+                          className="min-h-[50vh] lg:min-h-[65vh] w-full rounded-xl"
+                          title="Cover Letter PDF"
+                        />
+                      ) : isCompiling ? (
+                        <div className="flex flex-col items-center justify-center gap-3 py-20">
+                          <Loader2 className="h-7 w-7 animate-spin text-sage" />
+                          <p className="text-sm font-medium text-muted-foreground">
+                            {t("Compiling PDF...")}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="p-6">
+                          <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>{t("Compilation Failed")}</AlertTitle>
+                            <AlertDescription>
+                              {t(
+                                "The backend could not render the LaTeX into a PDF. Please check the LaTeX Source tab, correct any syntax errors, and re-compile."
+                              )}
+                            </AlertDescription>
+                          </Alert>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-4 flex flex-col gap-2 xl:flex-row">
+                      <Button
+                        className="flex-1 gap-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
+                        disabled={!generatedCoverLetterPdfBase64}
+                        onClick={() => downloadPDF(generatedCoverLetterPdfBase64, "CoverLetter")}
+                      >
+                        <Download className="h-4 w-4" />
+                        {t("Download Cover Letter PDF")}
+                      </Button>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="latex">
+                    <div className="overflow-hidden rounded-xl border border-border">
+                      <Editor
+                        height="65vh"
+                        defaultLanguage="latex"
+                        theme="vs-dark"
+                        value={generatedCoverLetterLatex}
+                        options={{
+                          minimap: { enabled: false },
+                          wordWrap: "on",
+                          padding: { top: 16 },
+                          readOnly: true,
+                          domReadOnly: true,
+                        }}
+                      />
+                    </div>
+                    <div className="mt-4 flex flex-col gap-2 xl:flex-row">
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-2 rounded-lg border-border"
+                        onClick={() => navigator.clipboard.writeText(generatedCoverLetterLatex)}
+                      >
+                        <FileText className="h-4 w-4" />
+                        {t("Copy LaTeX Code")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-2 rounded-lg border-border"
+                        onClick={() => downloadLatex(generatedCoverLetterLatex, "CoverLetter")}
+                      >
+                        <Download className="h-4 w-4" />
+                        {t("Download .tex")}
+                      </Button>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </TabsContent>
+            )}
+          </Tabs>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const inputCls =
+  "h-11 rounded-lg border-border bg-background text-[14px] focus-visible:bg-card"
+
+function Section({
+  title,
+  children,
+  action,
+  icon,
+  iconBg,
+  dataTour,
+}: {
+  title: string
+  children: React.ReactNode
+  action?: React.ReactNode
+  icon?: React.ReactNode
+  iconBg?: "sage" | "clay" | "plum"
+  dataTour?: string
+}) {
+  const iconBgClass =
+    iconBg === "sage"
+      ? "bg-sage-soft text-sage"
+      : iconBg === "clay"
+        ? "bg-clay-soft text-clay"
+        : iconBg === "plum"
+          ? "bg-plum-soft text-plum"
+          : "bg-secondary text-muted-foreground"
+  return (
+    <section className="rounded-2xl border border-border bg-card p-6" data-tour={dataTour}>
+      <header className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2.5 font-serif text-[18px] font-medium tracking-tight">
+          {icon && (
+            <span
+              className={`flex h-8 w-8 items-center justify-center rounded-lg ${iconBgClass}`}
+            >
+              {icon}
+            </span>
+          )}
+          {title}
+        </h2>
+        {action}
+      </header>
+      <div className="flex flex-col gap-4">{children}</div>
+    </section>
+  )
+}
+
+function SubCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative flex flex-col gap-4 rounded-xl border border-border bg-secondary/40 p-4">
+      {children}
+    </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-[12px] font-semibold">{label}</Label>
+      {children}
+    </div>
+  )
+}
+
+function AddButton({
+  onClick,
+  label,
+  small,
+}: {
+  onClick: () => void
+  label: string
+  small?: boolean
+}) {
+  return (
+    <Button
+      onClick={onClick}
+      size="sm"
+      variant="ghost"
+      className={`gap-1.5 rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground ${small ? "px-3 text-[12px]" : "px-3 text-[12px]"}`}
+    >
+      <Plus className="h-3.5 w-3.5" />
+      {label}
+    </Button>
+  )
+}
+
+function RemoveButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      size="icon"
+      variant="ghost"
+      className="absolute right-3 top-3 h-8 w-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+      onClick={onClick}
+    >
+      <Trash2 className="h-3.5 w-3.5" />
+    </Button>
+  )
+}
+
+function SkillsMultiSelect({
+  selected,
+  onToggle,
+  onRemove,
+  t,
+}: {
+  selected: string[]
+  onToggle: (skill: string) => void
+  onRemove: (index: number) => void
+  t: (key: string) => string
+}) {
+  const [open, setOpen] = useState(false)
+  const selectedLower = new Set(selected.map((s) => s.toLowerCase()))
+
+  // Group skills by category, preserving order from skills.ts
+  const groupedSkills = SKILLS.reduce<Record<string, string[]>>((acc, s) => {
+    if (!acc[s.category]) acc[s.category] = []
+    acc[s.category].push(s.name)
+    return acc
+  }, {})
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        {selected.map((skill, idx) => (
+          <Badge
+            key={`${skill}-${idx}`}
+            variant="outline"
+            className="group gap-1.5 rounded-full border-border bg-sage-soft px-3 py-1.5 text-[12px] font-medium text-sage"
+          >
+            {skill}
+            <button
+              type="button"
+              onClick={() => onRemove(idx)}
+              aria-label={`${t("Remove")} ${skill}`}
+              className="-mr-1 ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-sage/70 hover:bg-sage hover:text-white"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </Badge>
+        ))}
+        {selected.length === 0 && (
+          <p className="text-[12px] text-muted-foreground">
+            {t("No skills selected yet.")}
+          </p>
+        )}
+      </div>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="gap-1.5 rounded-lg border-dashed text-muted-foreground hover:bg-secondary hover:text-foreground"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {t("Add skill")}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-[320px] p-0">
+          <Command>
+            <CommandInput placeholder={t("Search skills...")} className="h-10 text-[13px]" />
+            <CommandList className="max-h-[300px]">
+              <CommandEmpty className="py-6 text-center text-[12px] text-muted-foreground">
+                {t("No matching skills.")}
+              </CommandEmpty>
+              {Object.entries(groupedSkills).map(([category, items], gi) => (
+                <div key={category}>
+                  {gi > 0 && <CommandSeparator />}
+                  <CommandGroup heading={category}>
+                    {items.map((name) => {
+                      const isSelected = selectedLower.has(name.toLowerCase())
+                      return (
+                        <CommandItem
+                          key={name}
+                          value={name}
+                          onSelect={() => onToggle(name)}
+                          className="cursor-pointer text-[13px]"
+                        >
+                          <Check
+                            className={`mr-2 h-3.5 w-3.5 ${isSelected ? "opacity-100 text-sage" : "opacity-0"
+                              }`}
+                          />
+                          <span className="truncate">{name}</span>
+                        </CommandItem>
+                      )
+                    })}
+                  </CommandGroup>
+                </div>
+              ))}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
+  )
+}
